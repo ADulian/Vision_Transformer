@@ -25,7 +25,12 @@ def main(args):
     test_loader = DataLoader(test_set, batch_size=batch_size)
 
     # Model
-    net = Vision_Transformer()
+    net = Vision_Transformer(img_size=img_size,
+                             in_channels=3,
+                             patch_size=args.patch_size,
+                             patch_embedding_dim=args.patch_emb,
+                             lr=args.lr,
+                             )
 
     # Training
     net.fit(train_loader=train_loader)
@@ -37,8 +42,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Args
-    parser.add_argument('--batch_size', '-bs', type=int, required=False, default=2)
-    parser.add_argument('--img_size', '-is', type=int, required=False, default=32)
+    parser.add_argument('--img_size', type=int, default=32)
+    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--batch_size', type=int, default=2)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--patch_emb', type=float, default=512)
+    parser.add_argument('--patch_size', type=float, default=16)
 
     args = parser.parse_args()
 
