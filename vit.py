@@ -1,13 +1,17 @@
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+from tqdm import tqdm
 
 # --------------------------------------------------------------------------------
 class Vision_Transformer(nn.Module):
 
     # --------------------------------------------------------------------------------
     def __init__(self,
+                 device,
+                 num_classes=10,
                  img_size=32,
                  in_channels=3,
                  num_layers=4,
@@ -19,7 +23,10 @@ class Vision_Transformer(nn.Module):
 
         super().__init__()
 
-        # Layers
+        # Device
+        self.device = device
+
+        # Layers + Params
         self.patch_embeddings = Patch_Embedding(img_size=img_size, in_channels=in_channels,
                                                 patch_size=patch_size, embedding_dim=embedding_dim)
 
@@ -29,6 +36,11 @@ class Vision_Transformer(nn.Module):
                                 forward_expansion=forward_expansion) for _ in range(num_layers)
         ])
 
+        self.mlp_head = nn.Linear(embedding_dim, num_classes) # Logit over classes
+
+        self.class_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, 1 + self.patch_embeddings.num_patches, embedding_dim))
+
         # Loss
         self.criterion = nn.CrossEntropyLoss()
 
@@ -37,49 +49,98 @@ class Vision_Transformer(nn.Module):
 
     # --------------------------------------------------------------------------------
     def forward(self, x):
+        batch_size = x.shape[0]
+
         # Patch Embeddings
         out = self.patch_embeddings(x)
+
+        # Get class embedding and expand it to match x
+        class_token = self.class_token.expand(batch_size, -1, -1)
+
+        # Append class embedding to the output of patch embeddings (final set of tokens)
+        out = torch.cat((class_token, out), dim=1)
+
+        # Position Embeddings
+        out = out + self.position_embeddings
 
         # Transformer
         for layer in self.transformer:
             out = layer(out)
 
-        #
+        # Prediction head
+        out = out[:, 0] # Section 3.1 Eq.4
+        out = self.mlp_head(out)
 
         return out
 
     # --------------------------------------------------------------------------------
     def fit(self, train_loader, epochs=10):
-        print("Training...")
+        print("\nTraining...")
+
+        self.train()
 
         for epoch in range(epochs):
 
-            epoch_loss = 0.0
-            for i, data in enumerate(train_loader):
-                # Data
-                x, y = data
+            with tqdm(total=len(train_loader), dynamic_ncols=True, desc=f"Epoch: {epoch + 1}/{epochs}") as t:
 
-                # Zero grad
-                self.optim.zero_grad()
+                epoch_loss = []
+                for i, data in enumerate(train_loader):
+                    # Data
+                    x, y = data
+                    x, y = x.to(self.device), y.to(self.device)
 
-                # Forward
-                y_hat = self(x)
-                break
+                    # Zero grad
+                    self.optim.zero_grad()
 
-                # Loss + Backward
-                loss = self.criterion(y_hat, y)
-                loss.backward()
+                    # Forward
+                    y_hat = self(x)
 
-                # Step
-                self.optim.step()
+                    # Loss + Backward
+                    loss = self.criterion(y_hat, y)
+                    epoch_loss.append(loss.item())
 
-                # Add loss
-                epoch_loss += loss.item()
+                    loss.backward()
 
-            # Mean loss
-            epoch_loss = epoch_loss / len(train_loader)
-            print(f"--- Epoch: {epoch} Loss: {epoch_loss}")
+                    # Step
+                    self.optim.step()
 
+                    # Update progress bar
+                    t.set_postfix(loss=np.mean(epoch_loss))
+                    t.update()
+
+    # --------------------------------------------------------------------------------
+    def test(self, test_loader):
+        print("\nTesting...")
+
+        self.eval()
+
+        # Get test loss
+        test_loss = []
+        correct = 0
+        with tqdm(total=len(test_loader), dynamic_ncols=True) as t:
+            for i, data in enumerate(test_loader):
+                with torch.inference_mode(mode=True):
+                    # Data
+                    x, y = data
+                    x, y = x.to(self.device), y.to(self.device)
+
+                    # Forward
+                    y_hat = self(x)
+
+                    # Loss
+                    loss = self.criterion(y_hat, y)
+                    test_loss.append(loss.item())
+
+                    # Acc
+                    _, predicted = torch.max(y_hat, 1)
+                    correct += (predicted == y).sum().item()
+
+                    # Update progress bar
+                    t.set_postfix(loss=np.mean(test_loss))
+                    t.update()
+
+        print(f"--- Test Loss: {np.mean(test_loss):.4f}")
+        print(f"--- Test Acc: {100 * (correct / len(test_loader.dataset)):.2f}%")
 
 # --------------------------------------------------------------------------------
 class Patch_Embedding(nn.Module):
