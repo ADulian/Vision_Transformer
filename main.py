@@ -28,7 +28,7 @@ def main(args):
     net = Vision_Transformer(img_size=img_size,
                              in_channels=3,
                              patch_size=args.patch_size,
-                             patch_embedding_dim=args.patch_emb,
+                             embedding_dim=args.patch_emb,
                              lr=args.lr,
                              )
 

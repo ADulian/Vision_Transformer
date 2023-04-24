@@ -11,15 +11,15 @@ class Vision_Transformer(nn.Module):
                  img_size=32,
                  in_channels=3,
                  patch_size=16,
-                 patch_embedding_dim=512,
+                 embedding_dim=512,
                  lr=1e-3):
         super().__init__()
 
         # Layers
         self.patch_embeddings = Patch_Embedding(img_size=img_size, in_channels=in_channels,
-                                                patch_size=patch_size, embedding_dim=patch_embedding_dim)
+                                                patch_size=patch_size, embedding_dim=embedding_dim)
 
-        self.attention = Attention()
+        self.transformer = Transformer_Encoder(embedding_dim=embedding_dim)
 
         # Loss
         self.criterion = nn.CrossEntropyLoss()
@@ -30,7 +30,7 @@ class Vision_Transformer(nn.Module):
     # --------------------------------------------------------------------------------
     def forward(self, x):
         out = self.patch_embeddings(x)
-        out = self.attention(out, out, out)
+        out = self.transformer(out)
 
         return out
 
@@ -132,26 +132,22 @@ class Attention(nn.Module):
         self.linear_out = nn.Linear(self.embedding_dim, self.embedding_dim)
 
     # --------------------------------------------------------------------------------
-    def forward(self, queries, keys, values): # No mask required for the ViT
+    def forward(self, x): # No mask required for the ViT
         """
-        This could be done with a single input (all inputs are the same anyway), however, this is following
-        the original implementation of Transformer which does both self-attention as well as cross-attention
         """
 
         # Batch size
-        batch_size = queries.shape[0]
+        batch_size = x.shape[0]
 
         # Number of "tokens" (patches + 1)
-        queries_len = queries.shape[1]
-        keys_len = keys.shape[1]
-        values_len = values.shape[1]
+        patches_len = x.shape[1]
 
         # Reshape embedding dimension for Multi-Headed Attention
         # Original shape -> [batch_size, num_patches + 1, embedding_dim]
         # New shape -> [batch_size, num_patches + 1, num_heads, head_dim]
-        queries = queries.reshape(batch_size, queries_len, self.num_heads, self.head_dim)
-        keys = queries.reshape(batch_size, keys_len, self.num_heads, self.head_dim)
-        values = queries.reshape(batch_size, values_len, self.num_heads, self.head_dim)
+        queries = x.reshape(batch_size, patches_len, self.num_heads, self.head_dim)
+        keys = x.reshape(batch_size, patches_len, self.num_heads, self.head_dim)
+        values = x.reshape(batch_size, patches_len, self.num_heads, self.head_dim)
 
         # Linear projection
         # Out shape -> [batch_size, num_patches + 1, num_heads, head_dim]
@@ -173,11 +169,66 @@ class Attention(nn.Module):
 
         # Stack Heads
         # Out shape -> [batch_size, num_patches + 1, num_heads * head_dim]
-        out = out.reshape(batch_size, queries_len, self.num_heads * self.head_dim)
+        out = out.reshape(batch_size, patches_len, self.num_heads * self.head_dim)
 
         # Linear projection
         # Out shape -> [batch_size, num_patches + 1, num_heads * head_dim]
         out = self.linear_out(out)
+
+        return out
+
+# --------------------------------------------------------------------------------
+class Transformer_Encoder(nn.Module):
+
+    # --------------------------------------------------------------------------------
+    def __init__(self, embedding_dim=512, num_heads=8, forward_expansion=4):
+        super().__init__()
+
+        # Norm Layers
+        self.norm_1 = nn.LayerNorm(embedding_dim)
+        self.norm_2 = nn.LayerNorm(embedding_dim)
+
+        # Attention
+        self.attention = Attention(embedding_dim=embedding_dim, num_heads=num_heads)
+
+        # MLP
+        self.mlp = nn.Sequential(nn.Linear(embedding_dim, embedding_dim * forward_expansion),
+                                 nn.GELU(),
+                                 nn.Linear(embedding_dim * forward_expansion, embedding_dim))
+
+
+    # --------------------------------------------------------------------------------
+    def forward(self, x):
+        """
+        """
+
+        # Residuals
+        # Shape -> [batch_size, num_patches + 1, embedding_dim]
+        residuals = x
+
+        # Layer Norm
+        # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
+        out = self.norm_1(x)
+
+        # Attention
+        # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
+        out = self.attention(out)
+
+        # Add
+        # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
+        residuals = out + residuals
+
+        # Layer Norm
+        # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
+        out = self.norm_2(residuals)
+
+        # MLP
+        # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
+        out = self.mlp(out)
+
+        # Add
+        # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
+        out = out + residuals
 
         return out
 
