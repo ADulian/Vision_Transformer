@@ -202,10 +202,6 @@ class Transformer_Encoder(nn.Module):
         """
         """
 
-        # Residuals
-        # Shape -> [batch_size, num_patches + 1, embedding_dim]
-        residuals = x
-
         # Layer Norm
         # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
         out = self.norm_1(x)
@@ -216,7 +212,7 @@ class Transformer_Encoder(nn.Module):
 
         # Add
         # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
-        residuals = out + residuals
+        residuals = out + x
 
         # Layer Norm
         # Out Shape -> [batch_size, num_patches + 1, embedding_dim]
