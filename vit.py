@@ -16,6 +16,7 @@ class Vision_Transformer(nn.Module):
                  embedding_dim=512,
                  forward_expansion=4,
                  lr=1e-3):
+
         super().__init__()
 
         # Layers
@@ -240,5 +241,3 @@ class Transformer_Encoder(nn.Module):
         out = out + residuals
 
         return out
-
-

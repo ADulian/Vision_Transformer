@@ -1,5 +1,7 @@
 import argparse
 
+import torch
+
 from torch.utils.data import DataLoader
 from torchvision import datasets,transforms
 
@@ -7,8 +9,11 @@ from vit import Vision_Transformer
 
 # --------------------------------------------------------------------------------
 def main(args):
+
+    # Params
     batch_size = args.batch_size
     img_size = args.img_size
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # Transforms
     transform = transforms.Compose([
