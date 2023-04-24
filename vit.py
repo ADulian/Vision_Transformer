@@ -30,7 +30,7 @@ class Vision_Transformer(nn.Module):
     # --------------------------------------------------------------------------------
     def forward(self, x):
         out = self.patch_embeddings(x)
-        self.attention(out, out, out)
+        out = self.attention(out, out, out)
 
         return out
 
@@ -50,6 +50,7 @@ class Vision_Transformer(nn.Module):
 
                 # Forward
                 y_hat = self(x)
+                break
 
                 # Loss + Backward
                 loss = self.criterion(y_hat, y)
@@ -128,7 +129,7 @@ class Attention(nn.Module):
         self.linear_keys = nn.Linear(self.head_dim, self.head_dim, bias=False)
         self.linear_values = nn.Linear(self.head_dim, self.head_dim, bias=False)
 
-        self.linear_out = nn.Linear(self.head_dim * self.num_heads, self.embedding_dim)
+        self.linear_out = nn.Linear(self.embedding_dim, self.embedding_dim)
 
     # --------------------------------------------------------------------------------
     def forward(self, queries, keys, values): # No mask required for the ViT
@@ -148,26 +149,36 @@ class Attention(nn.Module):
         # Reshape embedding dimension for Multi-Headed Attention
         # Original shape -> [batch_size, num_patches + 1, embedding_dim]
         # New shape -> [batch_size, num_patches + 1, num_heads, head_dim]
-        queries = queries.view(batch_size, queries_len, self.num_heads, self.head_dim)
-        keys = queries.view(batch_size, keys_len, self.num_heads, self.head_dim)
-        values = queries.view(batch_size, values_len, self.num_heads, self.head_dim)
+        queries = queries.reshape(batch_size, queries_len, self.num_heads, self.head_dim)
+        keys = queries.reshape(batch_size, keys_len, self.num_heads, self.head_dim)
+        values = queries.reshape(batch_size, values_len, self.num_heads, self.head_dim)
 
         # Linear projection
+        # Out shape -> [batch_size, num_patches + 1, num_heads, head_dim]
         queries = self.linear_queries(queries)
         keys = self.linear_keys(keys)
         values = self.linear_values(values)
 
         # Query @ Keys
+        # Out shape -> [batch_size, num_heads, num_patches + 1, num_patches + 1]
         similarity = torch.einsum("bqhd,bkhd->bhqk", [queries, keys])
 
         # Attention Filter
+        attention = similarity / (self.head_dim ** (1/2)) # Scale
+        attention = torch.softmax(attention, dim=-1) # Squash
 
         # Attention @ Values
+        # Out shape -> [batch_size, num_patches + 1, num_heads, head_dim]
+        out = torch.einsum("bhql,blhd->bqhd", [attention, values])
 
         # Stack Heads
+        # Out shape -> [batch_size, num_patches + 1, num_heads * head_dim]
+        out = out.reshape(batch_size, queries_len, self.num_heads * self.head_dim)
 
         # Linear projection
-        print("DONE")
-        return
+        # Out shape -> [batch_size, num_patches + 1, num_heads * head_dim]
+        out = self.linear_out(out)
+
+        return out
 
 
