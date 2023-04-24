@@ -230,7 +230,7 @@ class Attention(nn.Module):
         keys = self.linear_keys(keys)
         values = self.linear_values(values)
 
-        # Query @ Keys
+        # Queries @ Keys
         # Out shape -> [batch_size, num_heads, num_patches + 1, num_patches + 1]
         similarity = torch.einsum("bqhd,bkhd->bhqk", [queries, keys])
 
