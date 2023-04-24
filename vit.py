@@ -10,8 +10,11 @@ class Vision_Transformer(nn.Module):
     def __init__(self,
                  img_size=32,
                  in_channels=3,
+                 num_layers=4,
+                 num_heads=8,
                  patch_size=16,
                  embedding_dim=512,
+                 forward_expansion=4,
                  lr=1e-3):
         super().__init__()
 
@@ -19,7 +22,11 @@ class Vision_Transformer(nn.Module):
         self.patch_embeddings = Patch_Embedding(img_size=img_size, in_channels=in_channels,
                                                 patch_size=patch_size, embedding_dim=embedding_dim)
 
-        self.transformer = Transformer_Encoder(embedding_dim=embedding_dim)
+        self.transformer = nn.ModuleList([
+            Transformer_Encoder(embedding_dim=embedding_dim,
+                                num_heads=num_heads,
+                                forward_expansion=forward_expansion) for _ in range(num_layers)
+        ])
 
         # Loss
         self.criterion = nn.CrossEntropyLoss()
@@ -29,8 +36,14 @@ class Vision_Transformer(nn.Module):
 
     # --------------------------------------------------------------------------------
     def forward(self, x):
+        # Patch Embeddings
         out = self.patch_embeddings(x)
-        out = self.transformer(out)
+
+        # Transformer
+        for layer in self.transformer:
+            out = layer(out)
+
+        #
 
         return out
 

@@ -27,8 +27,10 @@ def main(args):
     # Model
     net = Vision_Transformer(img_size=img_size,
                              in_channels=3,
+                             num_layers=args.num_layers,
                              patch_size=args.patch_size,
-                             embedding_dim=args.patch_emb,
+                             embedding_dim=args.emb_d,
+                             forward_expansion=args.forward_expansion,
                              lr=args.lr,
                              )
 
@@ -46,7 +48,10 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=2)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--patch_emb', type=float, default=512)
+    parser.add_argument('--emb_d', type=float, default=512)
+    parser.add_argument('--num_heads', type=int, default=8)
+    parser.add_argument('--num_layers', type=int, default=4)
+    parser.add_argument('--forward_expansion', type=int, default=4)
     parser.add_argument('--patch_size', type=float, default=16)
 
     args = parser.parse_args()
